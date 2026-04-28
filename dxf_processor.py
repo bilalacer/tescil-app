@@ -439,12 +439,12 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     for vx in [490808.23,490814.33,490826.14,490862.74,490878.20,490892.71,490901.72,490919.10]:
         msp.add_line((vx,UST_HDR,0),(vx,bot_ust,0),dxfattribs={'layer':'KO_C','color':256})
 
-    # 5b. (D) satırı tablo çizgisi ekle
+    # 5b. (D) satırı alt yatay çizgi
     if n>=4:
         msp.add_line((490296.26,ALT_D_BOT,0),(490407.13,ALT_D_BOT,0),
-                     dxfattribs={'layer':'KO_C','color':256})
+                     dxfattribs={'layer':'KO_C','color':3})
         msp.add_line((490808.23,UST_D_BOT,0),(490919.10,UST_D_BOT,0),
-                     dxfattribs={'layer':'KO_C','color':256})
+                     dxfattribs={'layer':'KO_C','color':3})
 
     # 5c. Boş koordinat satırlarının MK değerlerini temizle (0.09 kalıntıları)
     # ALT: KO_M MK sütunu X=490288.09
