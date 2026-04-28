@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tescil Bildirimi Oluşturucu</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1117;--surface:#181c27;--border:#2a2f3d;
+    --accent:#3d7fff;--accent2:#00c896;--text:#e8ecf4;
+    --muted:#7a8299;--danger:#ff4f4f;--success:#00c896;
+    --radius:6px;--font:'IBM Plex Sans',sans-serif;--mono:'IBM Plex Mono',monospace;
+  }
+  body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;padding:2rem 1rem}
+
+  .container{max-width:860px;margin:0 auto}
+
+  header{margin-bottom:2.5rem;border-bottom:1px solid var(--border);padding-bottom:1.5rem}
+  header h1{font-size:1.4rem;font-weight:500;letter-spacing:.5px}
+  header p{color:var(--muted);font-size:.85rem;margin-top:.4rem}
+
+  .badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;background:#1e2435;color:var(--accent);border:1px solid #2a3a5e;letter-spacing:.5px;margin-left:.5rem;vertical-align:middle}
+
+  /* Adım göstergesi */
+  .steps{display:flex;gap:0;margin-bottom:2.5rem}
+  .step{flex:1;padding:.75rem 1rem;background:var(--surface);border:1px solid var(--border);font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:.5rem;cursor:default}
+  .step:first-child{border-radius:var(--radius) 0 0 var(--radius)}
+  .step:last-child{border-radius:0 var(--radius) var(--radius) 0}
+  .step.active{background:#1a2340;border-color:var(--accent);color:var(--text)}
+  .step.done{color:var(--success)}
+  .step-num{width:20px;height:20px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-family:var(--mono);flex-shrink:0}
+  .step.active .step-num{background:var(--accent)}
+  .step.done .step-num{background:var(--success)}
+
+  /* Upload alanı */
+  .upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem}
+  .upload-box{border:1.5px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;cursor:pointer;transition:.15s}
+  .upload-box:hover{border-color:var(--accent);background:#12192a}
+  .upload-box.filled{border-style:solid;border-color:var(--success);background:#0d1e18}
+  .upload-box input[type=file]{display:none}
+  .upload-icon{font-size:1.8rem;margin-bottom:.5rem;opacity:.4}
+  .upload-box.filled .upload-icon{opacity:1}
+  .upload-label{font-size:.8rem;color:var(--muted)}
+  .upload-box.filled .upload-label{color:var(--success)}
+  .upload-name{font-family:var(--mono);font-size:.75rem;color:var(--accent);margin-top:.3rem;word-break:break-all}
+
+  /* Önizleme tablosu */
+  #onizle-panel{display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem}
+  #onizle-panel h3{font-size:.85rem;font-weight:500;margin-bottom:.75rem;color:var(--muted)}
+  table.preview{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.78rem}
+  table.preview th{text-align:left;color:var(--muted);padding:.3rem .5rem;border-bottom:1px solid var(--border);font-weight:400}
+  table.preview td{padding:.3rem .5rem;border-bottom:1px solid #1e2435}
+  table.preview td.val{color:var(--accent2)}
+  table.preview .ada{color:var(--muted);font-size:.72rem}
+
+  /* Form */
+  .form-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem}
+  .form-section-title{font-size:.72rem;font-weight:500;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:1rem}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+  .form-grid.cols3{grid-template-columns:1fr 1fr 1fr}
+  .form-group{display:flex;flex-direction:column;gap:.3rem}
+  .form-group.full{grid-column:1/-1}
+  label{font-size:.73rem;color:var(--muted);font-family:var(--mono)}
+  input[type=text],input[type=date]{
+    background:#0f1117;border:1px solid var(--border);border-radius:var(--radius);
+    padding:.5rem .65rem;color:var(--text);font-size:.85rem;font-family:var(--font);width:100%;
+    transition:.15s
+  }
+  input:focus{outline:none;border-color:var(--accent)}
+  .input-row{display:grid;grid-template-columns:1fr 60px;gap:.5rem}
+
+  /* Butonlar */
+  .btn-row{display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem}
+  .btn{padding:.6rem 1.4rem;border-radius:var(--radius);font-size:.85rem;cursor:pointer;border:none;font-family:var(--font);font-weight:500;transition:.15s}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:#2d6fe8}
+  .btn-primary:disabled{background:#2a2f3d;color:var(--muted);cursor:not-allowed}
+  .btn-secondary{background:transparent;color:var(--muted);border:1px solid var(--border)}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--text)}
+
+  .loading{display:none;align-items:center;gap:.5rem;font-size:.82rem;color:var(--muted)}
+  .spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .alert{padding:.75rem 1rem;border-radius:var(--radius);font-size:.82rem;margin-bottom:1rem;display:none}
+  .alert-err{background:#2a1010;border:1px solid #5a1c1c;color:#ff8080}
+  .alert-ok{background:#0d1e18;border:1px solid #1a4d38;color:var(--success)}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Tescil Bildirimi Oluşturucu <span class="badge">KADASTRO · AYIRMA</span></h1>
+    <p>Çizim DXF'ten otomatik alan/koordinat hesabı → Şablonu doldur → İndir</p>
+  </header>
+
+  <div class="steps">
+    <div class="step active" id="s1"><div class="step-num">1</div> DXF Yükle</div>
+    <div class="step" id="s2"><div class="step-num">2</div> Önizle &amp; Doğrula</div>
+    <div class="step" id="s3"><div class="step-num">3</div> Bilgileri Gir</div>
+    <div class="step" id="s4"><div class="step-num">4</div> İndir</div>
+  </div>
+
+  <div id="alert-err" class="alert alert-err"></div>
+  <div id="alert-ok" class="alert alert-ok"></div>
+
+  <!-- Adım 1: Dosya Yükleme -->
+  <div class="upload-grid">
+    <div class="upload-box" id="box-cizim" onclick="document.getElementById('file-cizim').click()">
+      <input type="file" id="file-cizim" accept=".dxf" onchange="dosyaSec('cizim',this)">
+      <div class="upload-icon">📐</div>
+      <div class="upload-label">Çizim DXF</div>
+      <div class="upload-name" id="name-cizim">— dosya seçilmedi —</div>
+    </div>
+    <div class="upload-box" id="box-sablon" onclick="document.getElementById('file-sablon').click()">
+      <input type="file" id="file-sablon" accept=".dxf" onchange="dosyaSec('sablon',this)">
+      <div class="upload-icon">📋</div>
+      <div class="upload-label">Tescil Bildirimi Şablonu DXF</div>
+      <div class="upload-name" id="name-sablon">— dosya seçilmedi —</div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:1.5rem">
+    <div class="loading" id="load-onizle"><div class="spinner"></div> Çizim analiz ediliyor…</div>
+    <button class="btn btn-secondary" id="btn-onizle" onclick="onizle()" disabled>Çizimi Analiz Et →</button>
+  </div>
+
+  <!-- Adım 2: Önizleme -->
+  <div id="onizle-panel">
+    <h3>Çizimden Hesaplanan Değerler</h3>
+    <table class="preview">
+      <thead><tr><th>Ada</th><th>Parsel</th><th>Hesap Alanı (m²)</th><th>Yanılma Sınırı (m²)</th><th>Noktalar</th></tr></thead>
+      <tbody id="preview-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Adım 3: Form -->
+  <form id="main-form" style="display:none">
+    <div class="form-section">
+      <div class="form-section-title">Konum Bilgileri</div>
+      <div class="form-grid">
+        <div class="form-group"><label>İL</label><input type="text" name="il" placeholder="EDİRNE" required></div>
+        <div class="form-group"><label>İLÇE</label><input type="text" name="ilce" placeholder="SÜLOĞLU" required></div>
+        <div class="form-group"><label>MAH / KÖY</label><input type="text" name="koy" placeholder="TATARLAR" required></div>
+        <div class="form-group"><label>MEVKİİ</label><input type="text" name="mevkii" placeholder="BAĞLIK"></div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Parsel Bilgileri</div>
+      <div class="form-grid">
+        <div class="form-group"><label>PAFTA NO</label><input type="text" name="pafta" placeholder="E17B18B1"></div>
+        <div class="form-group"><label>KÜTÜK SA. NO</label><input type="text" name="kutuk" placeholder="4568"></div>
+        <div class="form-group full"><label>MALİK (Ad Soyad)</label><input type="text" name="malik" placeholder="BİLAL ACER" required></div>
+        <div class="form-group"><label>CİNSİ</label><input type="text" name="cinsi" placeholder="BAHÇE"></div>
+        <div class="form-group">
+          <label>TESCİLLİ ALAN</label>
+          <div class="input-row">
+            <input type="text" name="tescilli_m2" placeholder="2232 m²" required>
+            <input type="text" name="tescilli_dm2" placeholder="00 dm²">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">İşlem Bilgileri</div>
+      <div class="form-grid cols3">
+        <div class="form-group"><label>TARİH</label><input type="text" name="tarih" placeholder="27.04.2026"></div>
+        <div class="form-group"><label>NO</label><input type="text" name="no" placeholder="55"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <div class="loading" id="load-olustur"><div class="spinner"></div> DXF oluşturuluyor…</div>
+      <button type="button" class="btn btn-secondary" onclick="sifirla()">Sıfırla</button>
+      <button type="submit" class="btn btn-primary" id="btn-olustur">DXF Oluştur &amp; İndir ↓</button>
+    </div>
+  </form>
+</div>
+
+<script>
+let dosyalar = {cizim: null, sablon: null};
+let cizimVeri = null;
+
+function dosyaSec(tip, input) {
+  const f = input.files[0];
+  if (!f) return;
+  dosyalar[tip] = f;
+  document.getElementById('box-' + tip).classList.add('filled');
+  document.getElementById('name-' + tip).textContent = f.name;
+  if (dosyalar.cizim && dosyalar.sablon)
+    document.getElementById('btn-onizle').disabled = false;
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const s = document.getElementById('s'+i);
+    s.classList.remove('active','done');
+    if (i < n) s.classList.add('done');
+    if (i === n) s.classList.add('active');
+  }
+}
+
+function showAlert(type, msg) {
+  const el = document.getElementById('alert-' + type);
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 6000);
+}
+
+async function onizle() {
+  const fd = new FormData();
+  fd.append('cizim', dosyalar.cizim);
+  document.getElementById('load-onizle').style.display = 'flex';
+  document.getElementById('btn-onizle').disabled = true;
+  try {
+    const r = await fetch('/onizle', {method:'POST', body:fd});
+    const veri = await r.json();
+    if (veri.hata) { showAlert('err', veri.hata); return; }
+    cizimVeri = veri;
+    renderOnizle(veri);
+    document.getElementById('onizle-panel').style.display = 'block';
+    document.getElementById('main-form').style.display = 'block';
+    setStep(3);
+  } catch(e) {
+    showAlert('err', 'Sunucu hatası: ' + e.message);
+  } finally {
+    document.getElementById('load-onizle').style.display = 'none';
+    document.getElementById('btn-onizle').disabled = false;
+  }
+}
+
+function renderOnizle(veri) {
+  const tbody = document.getElementById('preview-body');
+  tbody.innerHTML = '';
+  const ada = veri.ada_no || '?';
+  const parsel = veri.parsel_no || '?';
+
+  // Eski parsel
+  const toplam = Object.values(veri.parseller).reduce((s,p) => s+p.alan, 0);
+  tbody.innerHTML += `<tr>
+    <td>${ada}</td><td>${parsel} <span class="ada">(eski)</span></td>
+    <td class="val">${toplam.toFixed(2)}</td>
+    <td class="val">—</td><td>tüm noktalar</td>
+  </tr>`;
+
+  // Yeni parseller
+  Object.entries(veri.parseller).sort().forEach(([label, p]) => {
+    tbody.innerHTML += `<tr>
+      <td>${ada}</td><td>${label}</td>
+      <td class="val">${p.alan.toFixed(2)}</td>
+      <td class="val">${p.ys}</td>
+      <td>${p.m2} m² ${String(p.dm2).padStart(2,'0')} dm²</td>
+    </tr>`;
+  });
+}
+
+document.getElementById('main-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const fd = new FormData(this);
+  fd.append('cizim', dosyalar.cizim);
+  fd.append('sablon', dosyalar.sablon);
+  document.getElementById('load-olustur').style.display = 'flex';
+  document.getElementById('btn-olustur').disabled = true;
+  try {
+    const r = await fetch('/olustur', {method:'POST', body:fd});
+    if (!r.ok) {
+      const err = await r.json();
+      showAlert('err', err.hata || 'Hata oluştu.');
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'TESCİL_BİLDİRİMİ.dxf';
+    a.click(); URL.revokeObjectURL(url);
+    setStep(4);
+    showAlert('ok', 'TESCİL_BİLDİRİMİ.dxf başarıyla oluşturuldu ve indirildi.');
+  } catch(ex) {
+    showAlert('err', 'Sunucu hatası: ' + ex.message);
+  } finally {
+    document.getElementById('load-olustur').style.display = 'none';
+    document.getElementById('btn-olustur').disabled = false;
+  }
+});
+
+function sifirla() {
+  location.reload();
+}
+</script>
+</body>
+</html>
