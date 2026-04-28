@@ -270,7 +270,7 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             alan=TOPLAM; tesc=f"{TM2}.{TDM2}" if TM2 else ''; lbl=PARSEL; ada_val=ADA
         else:
             if not label or label not in P: return
-            alan=round(P[label]['alan'],2); tesc=''; lbl=label; ada_val=ADA
+            alan=round(P[label]['alan'],2); tesc=f"{alan:.2f}"; lbl=label; ada_val=ADA
 
         ys=yanilma_siniri(alan)
 
