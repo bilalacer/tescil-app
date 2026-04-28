@@ -1,8 +1,8 @@
-"""Tescil Bildirimi DXF İşleyici v4 - Kesin pozisyon bazlı"""
+"""Tescil Bildirimi DXF İşleyici v5 - Kesin pozisyon haritası"""
 import math, tempfile, os
 import ezdxf, ezdxf.xref as xref
 
-
+# ─── Yardımcı fonksiyonlar ────────────────────────────────────────────────
 def yanilma_siniri(alan):
     b=[(0,10,.05),(10,100,.02),(100,500,.01),(500,1000,.005),
        (1000,5000,.004),(5000,25000,.003),(25000,1e18,.0015)]
@@ -12,13 +12,11 @@ def yanilma_siniri(alan):
         t+=(min(alan,hi)-lo)*r
     return round(t,2)
 
-
 def shoelace(pts):
     n=len(pts); a=0.
     for i in range(n):
         j=(i+1)%n; a+=pts[i][0]*pts[j][1]-pts[j][0]*pts[i][1]
     return abs(a)/2.
-
 
 def _read(b):
     with tempfile.NamedTemporaryFile(suffix='.dxf',delete=False) as t:
@@ -31,24 +29,28 @@ def _save(doc):
     with open(p,'rb') as f: d=f.read()
     os.unlink(p); return d
 
-def _set(msp, iy, ix, val, tol=1.0):
-    """INPUT katmanında (iy,ix) konumundaki entity'yi güncelle."""
+def _ent(msp, layer, iy, ix, tol=1.5):
+    """Belirli katman ve konumdaki TEXT entity'yi döndür."""
     for e in msp:
-        if e.dxftype()=='TEXT' and e.dxf.layer=='INPUT':
+        if e.dxftype()=='TEXT' and e.dxf.layer==layer:
             if abs(float(e.dxf.insert.y)-iy)<tol and abs(float(e.dxf.insert.x)-ix)<tol:
-                e.dxf.text=str(val); return True
+                return e
+    return None
+
+def _set(msp, layer, iy, ix, val, tol=1.5):
+    e=_ent(msp,layer,iy,ix,tol)
+    if e: e.dxf.text=str(val); return True
     return False
 
-def _add(msp, iy, ix, val, ref_e):
-    """Yeni TEXT entity ekle."""
+def _add_text(msp, layer, iy, ix, val, ref_e):
     msp.add_text(str(val), dxfattribs={
-        'layer':'INPUT','insert':(ix,iy,0),
+        'layer':layer,'insert':(ix,iy,0),
         'height':ref_e.dxf.height,
         'style':ref_e.dxf.get('style','Standard'),
         'color':ref_e.dxf.get('color',256),
     })
 
-
+# ─── Çizimden veri çekme ─────────────────────────────────────────────────
 def cizimden_veri_cek(cizim_bytes):
     doc=_read(cizim_bytes); msp=doc.modelspace()
 
@@ -59,7 +61,6 @@ def cizimden_veri_cek(cizim_bytes):
             pts=[(float(p[0]),float(p[1])) for p in e.get_points()]
             if len(pts)>=3: polygons.append(pts)
 
-    # Parsel etiketleri
     labels={}
     for e in msp:
         if e.dxftype()=='TEXT' and 'YENİ_PARSEL_NO' in e.dxf.layer:
@@ -79,27 +80,28 @@ def cizimden_veri_cek(cizim_bytes):
             a=shoelace(pts)
             parsel_data[bl]={'alan':a,'m2':int(a),'dm2':round((a-int(a))*100),'pts':pts}
 
-    # Koordinat noktaları
-    nadi={}; kory={}; korm={}
+    # Koordinat noktaları (NADI + KOR_Y katmanları)
+    nadi={}; kory_rows={}
     for e in msp:
         if e.dxftype()!='TEXT': continue
-        iy=round(float(e.dxf.insert.y),1)
-        ix=round(float(e.dxf.insert.x),1)
+        iy=round(float(e.dxf.insert.y),1); ix=round(float(e.dxf.insert.x),1)
         if e.dxf.layer=='NADI': nadi[iy]=e.dxf.text
         elif e.dxf.layer=='KOR_Y':
-            if iy not in kory: kory[iy]={}
-            kory[iy][ix]=e.dxf.text
+            if iy not in kory_rows: kory_rows[iy]={}
+            kory_rows[iy][ix]=e.dxf.text
         elif e.dxf.layer=='KOR_MK':
-            korm[iy]=e.dxf.text
+            if iy not in kory_rows: kory_rows[iy]={}
+            kory_rows[iy]['mk']=e.dxf.text
 
     nokta_listesi=[]
-    for iy in sorted(kory.keys(),reverse=True):
-        cols=sorted(kory[iy].items())
-        if len(cols)>=2:
+    for iy in sorted(kory_rows.keys(),reverse=True):
+        cols=kory_rows[iy]
+        num_cols=sorted([(x,v) for x,v in cols.items() if x!='mk'])
+        if len(num_cols)>=2:
             nokta_listesi.append({
                 'no':nadi.get(iy,'?'),
-                'y':cols[0][1],'x':cols[1][1],
-                'mk':korm.get(iy,'0.09')
+                'y':num_cols[0][1], 'x':num_cols[1][1],
+                'mk':cols.get('mk','0.09')
             })
 
     ada_no='?'; parsel_no='?'
@@ -112,245 +114,255 @@ def cizimden_veri_cek(cizim_bytes):
             'ada_no':ada_no,'parsel_no':parsel_no,
             'toplam_alan':sum(v['alan'] for v in parsel_data.values())}
 
-
+# ─── Ana işlev ───────────────────────────────────────────────────────────
 def tescil_olustur(sablon_bytes, cizim_bytes, form):
     veri=cizimden_veri_cek(cizim_bytes)
     doc=_read(sablon_bytes); msp=doc.modelspace()
 
     ADA=veri['ada_no']; PARSEL=veri['parsel_no']
-    PARSELLER=veri['parseller']; KOOR=veri['koordinatlar']
-    sp=sorted(PARSELLER.keys()); n=len(sp)
-    TOPLAM=round(sum(v['alan'] for v in PARSELLER.values()),2)
-    global PARSELLER_GLOBAL; PARSELLER_GLOBAL=PARSELLER
+    P=veri['parseller']; KOOR=veri['koordinatlar']
+    sp=sorted(P.keys()); n=len(sp)
+    TOPLAM=round(sum(v['alan'] for v in P.values()),2)
     TM2=form.get('TescilliM2',''); TDM2=form.get('TescilliDM2','00')
 
-    # ── 1. Eski kroki katmanlarını sil ──────────────────────────────────
-    OLD={'PARSEL','PARSEL_NO','NOKTA','KYA','@ROL','ROL_CEPHE','PASIF_PARSEL','SINIRLAR','@NA','@KO'}
-    for e in [e for e in msp if e.dxf.layer in OLD]: msp.delete_entity(e)
+    # 1. ŞABLONDAKİ KROKİ ENTİTYLERİNİ SİL
+    DEL_LAYERS={'PARSEL','PARSEL_NO','NOKTA','KYA','@ROL','ROL_CEPHE',
+                'PASIF_PARSEL','SINIRLAR','@NA','@KO',
+                'B_YENİ_PARSEL','B_YENİ_PARSEL_NO','B_ADA_NO','B_ESKİ_PARSEL_NO',
+                'B_NOKTA','B_ESKİ_PARSEL','B_YOL_DERE','B_BİNA','B_TELÇİT',
+                'B_DUVAR','B_SUNDURMA','B_BİNA_TARAMA','B_TERKİN','B_EL_DİREK',
+                'POL','CEPHE_U','NADI'}
+    for e in [e for e in msp if e.dxf.layer in DEL_LAYERS]:
+        msp.delete_entity(e)
 
-    # ── 2. Yeni çizimi içe aktar ────────────────────────────────────────
-    NEW={'B_YENİ_PARSEL','B_YENİ_PARSEL_NO','B_NOKTA','B_BİNA','B_TELÇİT','B_DUVAR',
-         'B_SUNDURMA','B_BİNA_TARAMA','B_YOL_DERE','B_ADA_NO','B_ESKİ_PARSEL_NO',
-         'B_TERKİN','B_EL_DİREK','POL','B_ESKİ_PARSEL','CEPHE_U','NADI'}
+    # 2. YENİ ÇİZİMİ İÇE AKTAR
+    NEW={'B_YENİ_PARSEL','B_YENİ_PARSEL_NO','B_NOKTA','B_BİNA','B_TELÇİT',
+         'B_DUVAR','B_SUNDURMA','B_BİNA_TARAMA','B_YOL_DERE','B_ADA_NO',
+         'B_ESKİ_PARSEL_NO','B_TERKİN','B_EL_DİREK','POL','B_ESKİ_PARSEL',
+         'CEPHE_U','NADI'}
     doc_c=_read(cizim_bytes)
     xref.load_modelspace(sdoc=doc_c,tdoc=doc,
                          filter_fn=lambda e:e.dxf.layer in NEW,
                          conflict_policy=xref.ConflictPolicy.KEEP)
 
-    # Eski YOL etiketleri temizle
-    if PARSELLER:
-        all_pts=[p for pd in PARSELLER.values() for p in pd['pts']]
-        my=min(p[1] for p in all_pts)-100; Xy=max(p[1] for p in all_pts)+100
-        for e in [e for e in msp if e.dxftype()=='TEXT' and e.dxf.layer=='B_YOL_DERE']:
-            iy=float(e.dxf.insert.y)
-            if iy<my or iy>Xy: msp.delete_entity(e)
-
-    # ── 3. INPUT alanları — KESİN POZİSYONLAR ──────────────────────────
-    # Ana form konum bilgileri
-    _set(msp,4633767.95,490461.81, form['Il'])
-    _set(msp,4633767.94,490513.64, form['Ilce'])
-    _set(msp,4633767.94,490565.10, form['Koy'])
-    _set(msp,4633768.24,490618.44, form['Mevkii'])
+    # 3. INPUT - KESİN POZİSYONLAR (TESCİL_BİLDİRİMİ_örnek.dxf'ten alındı)
+    # Ana form
+    _set(msp,'INPUT',4633767.95,490461.81, form['Il'])
+    _set(msp,'INPUT',4633767.94,490513.64, form['Ilce'])
+    _set(msp,'INPUT',4633767.94,490565.10, form['Koy'])
+    _set(msp,'INPUT',4633768.24,490618.44, form['Mevkii'])
     # KOO bölümü
-    _set(msp,4633817.75,490727.53, form['Il'])
-    _set(msp,4633813.50,490727.53, form['Ilce'])
-    _set(msp,4633809.25,490727.53, form['Koy'])
-    _set(msp,4633805.00,490727.53, f"{ADA}/{PARSEL}")
+    _set(msp,'INPUT',4633817.75,490727.53, form['Il'])
+    _set(msp,'INPUT',4633813.50,490727.53, form['Ilce'])
+    _set(msp,'INPUT',4633809.25,490727.53, form['Koy'])
+    _set(msp,'INPUT',4633805.00,490727.53, f"{ADA}/{PARSEL}")
     # Düşünceler
     lstr=', '.join(sp[:-1])+' ve '+sp[-1] if n>1 else sp[0]
-    _set(msp,4633733.88,490619.50, f"Ayırma sonucu {lstr}")
-    _set(msp,4633730.08,490619.50, "parseller oldu.")
+    _set(msp,'INPUT',4633733.88,490619.50, f"Ayırma sonucu {lstr}")
+    _set(msp,'INPUT',4633730.08,490619.50, "parseller oldu.")
     # Tarih / No
-    _set(msp,4633538.43,490636.39, form['Tarih'],0.5)
-    _set(msp,4633531.96,490636.81, form['No'],0.5)
-    # Tescilli alan (KO_R)
-    _set_kor(msp,4633594.15,490355.11, f"{TM2}.{TDM2}")
+    _set(msp,'INPUT',4633538.43,490636.39, form['Tarih'],0.5)
+    _set(msp,'INPUT',4633531.96,490636.81, form['No'],0.5)
+    # Tescilli alan (INPUT layer - alt tablo)
+    _set(msp,'INPUT',4633594.15,490355.11, f"{TM2}.{TDM2}",2)
 
     # Eski parsel satırı (Y=4633731.40)
-    ROW_ESK=4633731.40
-    _set(msp,ROW_ESK,490445.85, form['Kutuk'])
-    _set(msp,ROW_ESK,490462.96, form['Pafta'])
-    _set(msp,ROW_ESK,490486.20, ADA)
-    _set(msp,ROW_ESK,490502.98, PARSEL)
-    _set(msp,ROW_ESK,490513.59, '--')
-    _set(msp,ROW_ESK,490521.81, TM2)
-    _set(msp,ROW_ESK,490534.67, TDM2)
-    _set(msp,ROW_ESK,490555.24, form['Cinsi'])
-    _set(msp,ROW_ESK,490589.68, form['Malik'])
+    EY=4633731.40
+    _set(msp,'INPUT',EY,490445.85, form['Kutuk'])
+    _set(msp,'INPUT',EY,490462.96, form['Pafta'])
+    _set(msp,'INPUT',EY,490486.20, ADA)
+    _set(msp,'INPUT',EY,490502.98, PARSEL)
+    _set(msp,'INPUT',EY,490513.59, '--')
+    _set(msp,'INPUT',EY,490521.81, TM2)
+    _set(msp,'INPUT',EY,490534.67, TDM2)
+    _set(msp,'INPUT',EY,490555.24, form['Cinsi'])
+    _set(msp,'INPUT',EY,490589.68, form['Malik'])
 
-    # Yeni parsel satırları
-    BASE_Y=4633722.78; STEP=-(4633722.78-4633714.16)  # -8.62
-    ROW_YS=[BASE_Y+i*STEP for i in range(n)]
-
-    # Şablon 3 satır içeriyor (A,B,C), fazlası için referans entity bul
-    ref_e=None
-    for e in msp:
-        if e.dxftype()=='TEXT' and e.dxf.layer=='INPUT' and abs(float(e.dxf.insert.y)-4633705.54)<1:
-            ref_e=e; break
-
+    # Yeni parsel satırları (3 satır şablonda var: A,B,C)
+    PARSEL_ROW_YS=[4633722.78, 4633714.16, 4633705.54]
+    PARSEL_COLS={
+        'pafta':490462.96,'ada':490486.20,'parsel':490500.49,
+        'ha':490514.30,'m2':490521.81,'dm2':490534.67,
+        'cinsi':490555.24,'malik':490589.68
+    }
     for i,label in enumerate(sp):
-        pd=PARSELLER[label]; ry=ROW_YS[i]
-        # İlk 3 satır şablonda var; 4+ için ekle
-        _set_or_add(msp,ry,490462.96, form['Pafta'],ref_e)
-        _set_or_add(msp,ry,490486.20, ADA,ref_e)
-        _set_or_add(msp,ry,490500.49, label,ref_e)   # ortalama X
-        _set_or_add(msp,ry,490514.30, '--',ref_e)
-        _set_or_add(msp,ry,490521.81, str(pd['m2']),ref_e)
-        _set_or_add(msp,ry,490534.67, f"{pd['dm2']:02d}",ref_e)
-        _set_or_add(msp,ry,490555.24, form['Cinsi'],ref_e)
-        _set_or_add(msp,ry,490589.68, form['Malik'],ref_e)
+        pd=P[label]
+        if i < len(PARSEL_ROW_YS):
+            ry=PARSEL_ROW_YS[i]
+            _set(msp,'INPUT',ry,PARSEL_COLS['pafta'], form['Pafta'])
+            _set(msp,'INPUT',ry,PARSEL_COLS['ada'],   ADA)
+            _set(msp,'INPUT',ry,PARSEL_COLS['parsel'],label,2)
+            _set(msp,'INPUT',ry,PARSEL_COLS['ha'],    '--')
+            _set(msp,'INPUT',ry,PARSEL_COLS['m2'],    str(pd['m2']))
+            _set(msp,'INPUT',ry,PARSEL_COLS['dm2'],   f"{pd['dm2']:02d}")
+            _set(msp,'INPUT',ry,PARSEL_COLS['cinsi'], form['Cinsi'])
+            _set(msp,'INPUT',ry,PARSEL_COLS['malik'], form['Malik'])
+        else:
+            # Ekstra satır ekle (4. parsel ve sonrası)
+            ref=_ent(msp,'INPUT',4633705.54,490462.96,2)
+            if ref:
+                STEP=4633705.54-4633714.16  # -8.62
+                ry=4633705.54+(i-2)*STEP
+                for col,cx in PARSEL_COLS.items():
+                    if col=='pafta': val=form['Pafta']
+                    elif col=='ada': val=ADA
+                    elif col=='parsel': val=label
+                    elif col=='ha': val='--'
+                    elif col=='m2': val=str(pd['m2'])
+                    elif col=='dm2': val=f"{pd['dm2']:02d}"
+                    elif col=='cinsi': val=form['Cinsi']
+                    elif col=='malik': val=form['Malik']
+                    _add_text(msp,'INPUT',ry,cx,val,ref)
 
-    # ── 4. KO_R alan tablosu ─────────────────────────────────────────────
-    _update_alan_tablosu(msp, PARSELLER, sp, ADA, PARSEL, TOPLAM, TM2, TDM2)
+    # 4. KO_R ALAN TABLOSU - EXACT Y POZİSYONLARI
+    # Alt tablo satır Y'leri (şablondan):
+    ALT_ROWS={
+        4633594.15: ('ESK', None),
+        4633584.90: ('YEN', sp[0] if n>0 else ''),
+        4633576.87: ('YEN', sp[1] if n>1 else ''),
+        4633570.59: ('YEN', sp[2] if n>2 else ''),
+    }
+    # Üst tablo satır Y'leri:
+    UST_ROWS={
+        4633759.33: ('ESK', None),
+        4633750.08: ('YEN', sp[0] if n>0 else ''),
+        4633742.05: ('YEN', sp[1] if n>1 else ''),
+        4633735.77: ('YEN', sp[2] if n>2 else ''),
+    }
 
-    # ── 5. KO_M ve KO_R koordinat tablosu ───────────────────────────────
-    _update_koordinatlar(msp, KOOR)
+    def update_alan_row(msp, row_y, tip, label, tol=0.5):
+        """Tek alan tablosu satırını güncelle."""
+        if tip=='ESK':
+            alan=TOPLAM; tesc=f"{TM2}.{TDM2}" if TM2 else ''; lbl=PARSEL; ada_val=ADA
+        else:
+            if not label or label not in P: return
+            alan=round(P[label]['alan'],2); tesc=''; lbl=label; ada_val=ADA
 
-    # ── 6. KO_M beyaz ───────────────────────────────────────────────────
+        ys=yanilma_siniri(alan)
+
+        # Her iki tablonun sütun X'leri farklı - ikisini de tara
+        for e in msp:
+            if e.dxftype()!='TEXT' or e.dxf.layer!='KO_R': continue
+            iy=float(e.dxf.insert.y); ix=float(e.dxf.insert.x)
+            if abs(iy-row_y)>tol: continue
+            t=e.dxf.text
+
+            # Ada sütunu
+            if abs(ix-490808.96)<1 or abs(ix-490297.00)<1: e.dxf.text=ada_val
+            # Parsel sütunu
+            elif abs(ix-490817.02)<2 or abs(ix-490305.28)<2 or abs(ix-490818.30)<2 or abs(ix-490306.33)<2:
+                e.dxf.text=lbl
+            # Noktalar sütunu
+            elif abs(ix-490827.16)<2 or abs(ix-490315.19)<2:
+                e.dxf.text=''  # boş bırak
+            # Tescilli alan
+            elif abs(ix-490867.08)<2 or abs(ix-490355.11)<2 or abs(ix-490868.60)<2 or abs(ix-490356.63)<2:
+                e.dxf.text=tesc
+            # Hesap alan
+            elif abs(ix-490881.74)<2 or abs(ix-490369.77)<2 or abs(ix-490883.26)<2 or abs(ix-490371.29)<2:
+                e.dxf.text=f"{alan:.2f}"
+            # Fark
+            elif abs(ix-490894.27)<2 or abs(ix-490382.30)<2:
+                e.dxf.text='0.00'
+            # Yanılma sınırı
+            elif abs(ix-490905.94)<3 or abs(ix-490393.97)<3 or abs(ix-490907.46)<3 or abs(ix-490395.49)<3:
+                e.dxf.text=str(ys)
+
+    for row_y,(tip,label) in ALT_ROWS.items():
+        update_alan_row(msp,row_y,tip,label)
+    for row_y,(tip,label) in UST_ROWS.items():
+        update_alan_row(msp,row_y,tip,label)
+
+    # D satırı ekle (4. parsel varsa)
+    if n>=4:
+        label_d=sp[3]; pd_d=P[label_d]; alan_d=round(pd_d['alan'],2); ys_d=yanilma_siniri(alan_d)
+        STEP_ALT=4633570.59-4633576.87; STEP_UST=4633735.77-4633742.05
+        for base_y, step, x_map in [
+            (4633570.59, STEP_ALT, {
+                490297.00:ADA,490305.20:label_d,490315.19:'',
+                490355.11:'',490356.63:'',490369.77:f"{alan_d:.2f}",490371.29:f"{alan_d:.2f}",
+                490382.30:'0.00',490393.97:str(ys_d),490395.49:str(ys_d)
+            }),
+            (4633735.77, STEP_UST, {
+                490808.96:ADA,490816.94:label_d,490827.16:'',
+                490867.08:'',490868.60:'',490881.74:f"{alan_d:.2f}",490883.26:f"{alan_d:.2f}",
+                490894.27:'0.00',490905.94:str(ys_d),490907.46:str(ys_d)
+            }),
+        ]:
+            new_y=base_y+step
+            ref=None
+            for e in msp:
+                if e.dxftype()=='TEXT' and e.dxf.layer=='KO_R' and abs(float(e.dxf.insert.y)-base_y)<0.5:
+                    ref=e; break
+            if ref:
+                for cx,val in x_map.items():
+                    _add_text(msp,'KO_R',new_y,cx,val,ref)
+
+    # 5. KOORDİNAT TABLOSU GÜNCELLEMESİ
+    # Alt tablo KO_R nokta adları (X=490231.24): A1,A2,A3,A4,A5
+    ALT_KOR_ROWS=[4633593.93,4633590.74,4633587.56,4633584.37,4633581.19]
+    # Alt tablo KO_M nokta adları (X=490231.24): 340/2,340/3,...
+    ALT_KOM_ROWS=[4633578.01,4633574.82,4633571.64,4633568.46,4633565.27,4633562.09,4633558.90]
+    # Üst tablo KO_R nokta adları (X=490743.20): A1-A5 (not shown in output but similar)
+    UST_KOM_ROWS=[4633743.18,4633740.00,4633736.82,4633733.63,4633730.45,4633727.26,4633724.08]
+
+    # KOR_Y sütun X değerleri
+    ALT_Y_X=490250.65; ALT_X_X=490269.65; ALT_MK_X=490288.09
+    UST_Y_X=490762.61; UST_X_X=490781.61; UST_MK_X=490800.06
+
+    all_nokta_rows=ALT_KOR_ROWS+ALT_KOM_ROWS  # 12 slot, ilk 5 KO_R, son 7 KO_M
+
+    for i,(row_y,layer,label_x) in enumerate(
+        [(y,'KO_R',490231.24) for y in ALT_KOR_ROWS] +
+        [(y,'KO_M',490231.24) for y in ALT_KOM_ROWS]
+    ):
+        if i<len(KOOR):
+            pt=KOOR[i]
+            # Nokta adı
+            _set(msp,layer,row_y,label_x, pt['no'])
+            # Koordinatlar (KO_R layer)
+            _set(msp,'KO_R',row_y,ALT_Y_X, pt['y'],0.5)
+            _set(msp,'KO_R',row_y,ALT_X_X, pt['x'],0.5)
+            _set(msp,'KO_R',row_y,ALT_MK_X,pt.get('mk','0.09'),0.5)
+            _set(msp,'KO_M',row_y,ALT_MK_X,pt.get('mk','0.09'),0.5)
+        else:
+            _set(msp,layer,row_y,label_x,'')
+            for cx in [ALT_Y_X,ALT_X_X,ALT_MK_X]:
+                _set(msp,'KO_R',row_y,cx,'',0.5)
+
+    # Üst tablo KO_M güncellemesi
+    for i,row_y in enumerate(UST_KOM_ROWS):
+        if i<len(KOOR):
+            pt=KOOR[i]
+            _set(msp,'KO_M',row_y,490743.20, pt['no'])
+            _set(msp,'KO_R',row_y,UST_Y_X,  pt['y'],0.5)
+            _set(msp,'KO_R',row_y,UST_X_X,  pt['x'],0.5)
+            _set(msp,'KO_R',row_y,UST_MK_X, pt.get('mk','0.09'),0.5)
+        else:
+            _set(msp,'KO_M',row_y,490743.20,'')
+            for cx in [UST_Y_X,UST_X_X,UST_MK_X]:
+                _set(msp,'KO_R',row_y,cx,'',0.5)
+
+    # KO_R'daki A1-A5 etiketleri güncelle (üst tablo X=490743.20)
+    UST_KOR_A_ROWS=[4633759.10,4633755.92,4633752.74,4633749.55,4633746.37]
+    for i,row_y in enumerate(UST_KOR_A_ROWS):
+        if i<len(KOOR):
+            pt=KOOR[i]
+            _set(msp,'KO_R',row_y,490743.20, pt['no'],0.5)
+            _set(msp,'KO_R',row_y,UST_Y_X,  pt['y'],0.5)
+            _set(msp,'KO_R',row_y,UST_X_X,  pt['x'],0.5)
+            _set(msp,'KO_R',row_y,UST_MK_X, pt.get('mk','0.09'),0.5)
+        else:
+            _set(msp,'KO_R',row_y,490743.20,'',0.5)
+
+    # 6. KO_M beyaz
     layer=doc.layers.get('KO_M')
     if layer: layer.color=7
 
-    # ── 7. SABLON_YAZI ada/parsel ────────────────────────────────────────
+    # 7. SABLON_YAZI ada/parsel (340/22 → 100/1)
     for e in msp:
         if e.dxftype()=='TEXT' and e.dxf.layer=='SABLON_YAZI':
-            if '/' in e.dxf.text and any(c.isdigit() for c in e.dxf.text):
+            if '/' in e.dxf.text and any(c.isdigit() for c in e.dxf.text) and len(e.dxf.text)<10:
                 e.dxf.text=f"{ADA}/{PARSEL}"
 
     return _save(doc)
-
-
-def _set_kor(msp, iy, ix, val, tol=1.5):
-    for e in msp:
-        if e.dxftype()=='TEXT' and e.dxf.layer=='KO_R':
-            if abs(float(e.dxf.insert.y)-iy)<tol and abs(float(e.dxf.insert.x)-ix)<tol:
-                e.dxf.text=str(val); return True
-    return False
-
-
-def _set_or_add(msp, iy, ix, val, ref_e, tol=2.0):
-    for e in msp:
-        if e.dxftype()=='TEXT' and e.dxf.layer=='INPUT':
-            if abs(float(e.dxf.insert.y)-iy)<tol and abs(float(e.dxf.insert.x)-ix)<tol:
-                e.dxf.text=str(val); return
-    if ref_e:
-        _add(msp,iy,ix,val,ref_e)
-
-
-def _update_alan_tablosu(msp, parseller, sp, ada, parsel_no, toplam, tm2, tdm2):
-    """KO_R alan tablosunu güncelle - iki tablo (üst ve alt)."""
-    n=len(sp)
-
-    # Şablondaki mevcut değerleri temizle ve güncelle
-    # Eski parsel değerleri: 4098.21, 1978.06, 1235.16, 884.99
-    # Ada değerleri: 340 → ada, Parsel: 22,23(A),24(B),25(C) → yeni
-
-    for e in msp:
-        if e.dxftype()!='TEXT' or e.dxf.layer!='KO_R': continue
-        iy=float(e.dxf.insert.y); ix=float(e.dxf.insert.x); t=e.dxf.text
-
-        # Ada sütunu → güncelle
-        if t=='340': e.dxf.text=ada; continue
-        # Eski parsel isimleri
-        if t in ('22',): e.dxf.text=parsel_no; continue
-        if t in ('23(A)',): e.dxf.text=sp[0] if n>0 else ''; continue
-        if t in ('24(B)',): e.dxf.text=sp[1] if n>1 else ''; continue
-        if t in ('25(C)',): e.dxf.text=sp[2] if n>2 else ''; continue
-
-        # Eski alan değerleri → yeni
-        if t=='4098.21':
-            # Tescilli veya hesap alan satırı
-            if abs(ix-490867.08)<2 or abs(ix-490355.11)<2:
-                e.dxf.text=f"{tm2}.{tdm2}" if tm2 else ''
-            elif abs(ix-490881.74)<2 or abs(ix-490369.77)<2:
-                e.dxf.text=f"{toplam:.2f}"
-            elif abs(ix-490905.94)<3 or abs(ix-490393.97)<3:
-                e.dxf.text=str(yanilma_siniri(toplam))
-            elif abs(ix-490894.27)<2 or abs(ix-490382.30)<2:
-                e.dxf.text='0.00'
-            continue
-
-        # (A) alanı (1978.06)
-        if t=='1978.06' and n>0:
-            a=round(PARSELLER_GLOBAL.get(sp[0],{}).get('alan',0),2) if PARSELLER_GLOBAL else 0
-            _update_alan_row(e,ix,a if a else 536.33,tm2,tdm2); continue
-
-        # (B) alanı
-        if t=='1235.16' and n>1:
-            a=round(PARSELLER_GLOBAL.get(sp[1],{}).get('alan',0),2) if PARSELLER_GLOBAL else 0
-            _update_alan_row(e,ix,a if a else 554.12,tm2,tdm2); continue
-
-        # (C) alanı
-        if t=='884.99' and n>2:
-            a=round(PARSELLER_GLOBAL.get(sp[2],{}).get('alan',0),2) if PARSELLER_GLOBAL else 0
-            _update_alan_row(e,ix,a if a else 579.77,tm2,tdm2); continue
-
-        # Noktalar sütununu güncelle
-        if '340/' in t or t in ('A3,A2','A5,A4,A2','A1,340/45','340/46,A1'):
-            e.dxf.text=''; continue
-
-    # (D) satırı - şablonda yoksa ekle
-    if n>=4:
-        _ekle_d_satiri(msp, parseller, sp, ada)
-
-
-PARSELLER_GLOBAL={}
-
-def _update_alan_row(e, ix, alan, tm2, tdm2):
-    if abs(ix-490881.74)<2 or abs(ix-490369.77)<2:
-        e.dxf.text=f"{alan:.2f}"
-    elif abs(ix-490867.08)<2 or abs(ix-490355.11)<2:
-        e.dxf.text=''
-    elif abs(ix-490905.94)<3 or abs(ix-490393.97)<3:
-        e.dxf.text=str(yanilma_siniri(alan))
-    elif abs(ix-490894.27)<2 or abs(ix-490382.30)<2:
-        e.dxf.text='0.00'
-
-
-def _ekle_d_satiri(msp, parseller, sp, ada):
-    if len(sp)<4: return
-    label=sp[3]; pd=parseller[label]; alan=round(pd['alan'],2)
-    # (C) satırından ref al (Y≈4633705.54)
-    ref_ents=[(e,float(e.dxf.insert.x)) for e in msp
-              if e.dxftype()=='TEXT' and e.dxf.layer=='KO_R'
-              and abs(float(e.dxf.insert.y)-4633705.54)<1]
-    for ref_e,ref_x in ref_ents:
-        dy=4633705.54-(4633705.54-4633714.16)  # bir adım aşağı
-        new_y=4633705.54-(4633714.16-4633705.54)
-        new_text=''
-        if abs(ref_x-490881.74)<2 or abs(ref_x-490369.77)<2: new_text=f"{alan:.2f}"
-        elif abs(ref_x-490867.08)<2 or abs(ref_x-490355.11)<2: new_text=''
-        elif abs(ref_x-490905.94)<3 or abs(ref_x-490393.97)<3: new_text=str(yanilma_siniri(alan))
-        elif abs(ref_x-490894.27)<2 or abs(ref_x-490382.30)<2: new_text='0.00'
-        elif abs(ref_x-490297.00)<2 or abs(ref_x-490808.96)<2: new_text=ada
-        elif abs(ref_x-490305.28)<2 or abs(ref_x-490817.02)<2: new_text=label
-        _add(msp,new_y,ref_x,new_text,ref_e)
-
-
-def _update_koordinatlar(msp, koor):
-    """KO_M nokta numaraları ve KO_R koordinat değerlerini güncelle."""
-    ko_m_ents=sorted(
-        [e for e in msp if e.dxftype()=='TEXT' and e.dxf.layer=='KO_M'],
-        key=lambda e:-float(e.dxf.insert.y)
-    )
-    for i,e in enumerate(ko_m_ents):
-        e.dxf.text=str(koor[i]['no']) if i<len(koor) else ''
-
-    # KO_R koordinat satırları - KO_M ile aynı Y'deki satırlar
-    ko_m_ys=[round(float(e.dxf.insert.y),1) for e in ko_m_ents]
-    for e in msp:
-        if e.dxftype()!='TEXT' or e.dxf.layer!='KO_R': continue
-        iy=round(float(e.dxf.insert.y),1); ix=float(e.dxf.insert.x)
-        # En yakın KO_M satırını bul
-        matches=[(abs(iy-my),i) for i,my in enumerate(ko_m_ys) if abs(iy-my)<2]
-        if not matches: continue
-        _,ki=min(matches)
-        if ki>=len(koor): e.dxf.text=''; continue
-        pt=koor[ki]
-        # Sütun tespiti: Y_easting, X_northing, MK (X pozisyonuna göre)
-        ko_m_y=ko_m_ys[ki]
-        # KO_M entity'sinin X'i
-        ko_m_x=float(ko_m_ents[ki].dxf.insert.x)
-        # KO_R sütunları KO_M'in sağında
-        if ix > ko_m_x+5 and ix < ko_m_x+25: e.dxf.text=pt['y']
-        elif ix > ko_m_x+25 and ix < ko_m_x+45: e.dxf.text=pt['x']
-        elif ix > ko_m_x+45: e.dxf.text=pt.get('mk','0.09')
