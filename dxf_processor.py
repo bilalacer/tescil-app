@@ -435,22 +435,28 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     for e in to_del_v: msp.delete_entity(e)
 
     # Yeni dikey çizgiler
-    ALT_TABLE_TOP = 4633609.63   # Tablonun tam üst sınırı (sol/sağ dış kenarlıklar için)
-    UST_TABLE_TOP = 4633774.81
-    bot_alt = ALT_D_BOT if n>=4 else 4633569.55
-    bot_ust = UST_D_BOT if n>=4 else 4633734.72
+    # Tam template değerleri (şablondan ölçüldü)
+    ALT_TABLE_TOP = 4633609.6342  # Tablonun tam üst sınırı
+    ALT_TABLE_BOT = ALT_D_BOT if n>=4 else 4633569.5456
+    UST_TABLE_TOP = 4633774.8100
+    UST_TABLE_BOT = UST_D_BOT if n>=4 else 4633734.7200
+    ALT_COL_HDR   = 4633604.4930  # Sütun başlık üstü (Ada/Parsel/Noktalar satırı)
+    UST_COL_HDR   = 4633769.4700
 
-    # Dış kenarlıklar: tam üstten başlar
-    msp.add_line((490296.26,ALT_TABLE_TOP,0),(490296.26,bot_alt,0),dxfattribs={'layer':'KO_C','color':96})
-    msp.add_line((490407.13,ALT_TABLE_TOP,0),(490407.13,bot_alt,0),dxfattribs={'layer':'KO_C','color':96})
-    msp.add_line((490808.23,UST_TABLE_TOP,0),(490808.23,bot_ust,0),dxfattribs={'layer':'KO_C','color':96})
-    msp.add_line((490919.10,UST_TABLE_TOP,0),(490919.10,bot_ust,0),dxfattribs={'layer':'KO_C','color':96})
+    # Sol ve sağ dış kenarlıklar: tam tablonun üstünden altına
+    for vx, top, bot in [
+        (490296.26, ALT_TABLE_TOP, ALT_TABLE_BOT),
+        (490407.13, ALT_TABLE_TOP, ALT_TABLE_BOT),
+        (490808.23, UST_TABLE_TOP, UST_TABLE_BOT),
+        (490919.10, UST_TABLE_TOP, UST_TABLE_BOT),
+    ]:
+        msp.add_line((vx,top,0),(vx,bot,0),dxfattribs={'layer':'KO_C','color':96})
 
-    # İç sütun ayırıcılar: sütun başlık üstünden başlar
+    # İç sütun ayırıcılar: sütun başlık satırı üstünden alta
     for vx in [490302.36,490314.17,490350.77,490366.24,490380.74,490389.76]:
-        msp.add_line((vx,ALT_HDR,0),(vx,bot_alt,0),dxfattribs={'layer':'KO_C','color':96})
+        msp.add_line((vx,ALT_COL_HDR,0),(vx,ALT_TABLE_BOT,0),dxfattribs={'layer':'KO_C','color':96})
     for vx in [490814.33,490826.14,490862.74,490878.20,490892.71,490901.72]:
-        msp.add_line((vx,UST_HDR,0),(vx,bot_ust,0),dxfattribs={'layer':'KO_C','color':96})
+        msp.add_line((vx,UST_COL_HDR,0),(vx,UST_TABLE_BOT,0),dxfattribs={'layer':'KO_C','color':96})
 
     # 5b. (D) satırı alt yatay çizgi
     if n>=4:
