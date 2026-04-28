@@ -96,11 +96,21 @@ def cizimden_veri_cek(cizim_bytes):
     nokta_listesi=[]
     for iy in sorted(kory_rows.keys(),reverse=True):
         cols=kory_rows[iy]
-        num_cols=sorted([(x,v) for x,v in cols.items() if x!='mk'])
-        if len(num_cols)>=2:
+        # KOR_Y sütunları X pozisyonuna göre sıralı: no, Y_easting, X_northing, MK
+        sorted_cols=sorted([(x,v) for x,v in cols.items() if x!='mk'])
+        if len(sorted_cols)>=3:
+            nokta_listesi.append({
+                'no':sorted_cols[0][1],   # nokta no (1,2,3...)
+                'y': sorted_cols[1][1],   # Y easting (490xxx)
+                'x': sorted_cols[2][1],   # X northing (4633xxx)
+                'mk':sorted_cols[3][1] if len(sorted_cols)>3 else cols.get('mk','0.09')
+            })
+        elif len(sorted_cols)==2:
+            # Eski format: NADI'den no, KOR_Y'den koordinatlar
             nokta_listesi.append({
                 'no':nadi.get(iy,'?'),
-                'y':num_cols[0][1], 'x':num_cols[1][1],
+                'y': sorted_cols[0][1],
+                'x': sorted_cols[1][1],
                 'mk':cols.get('mk','0.09')
             })
 
@@ -214,6 +224,29 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
                     elif col=='malik': val=form['Malik']
                     _add_text(msp,'INPUT',ry,cx,val,ref)
 
+    # Parsel noktalarını hesapla
+    def parsel_noktalar(label):
+        if label not in P or not KOOR: return ''
+        pts = P[label]['pts']
+        nos = []
+        for px,py in pts:
+            best_no,best_d='?',1e9
+            for pt in KOOR:
+                try:
+                    ky=float(pt['y']); kx=float(pt['x'])
+                    d=math.sqrt((px-ky)**2+(py-kx)**2)
+                    if d<best_d: best_d,best_no=d,pt['no']
+                except: pass
+            if best_d<5 and best_no!='?': nos.append(str(best_no))
+        # Tekrarları kaldır, sırayı koru
+        seen=set(); result=[]
+        for no in nos:
+            if no not in seen: seen.add(no); result.append(no)
+        return ','.join(result)
+
+    # Tüm noktalar (eski parsel)
+    tum_noktalar=','.join(str(pt['no']) for pt in KOOR)
+
     # 4. KO_R ALAN TABLOSU - EXACT Y POZİSYONLARI
     # Alt tablo satır Y'leri (şablondan):
     ALT_ROWS={
@@ -230,7 +263,8 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
         4633735.77: ('YEN', sp[2] if n>2 else ''),
     }
 
-    def update_alan_row(msp, row_y, tip, label, tol=0.5):
+    def update_alan_row(msp, row_y, tip, label, tol=0.5,
+                          tum_noktalar=tum_noktalar, parsel_noktalar=parsel_noktalar):
         """Tek alan tablosu satırını güncelle."""
         if tip=='ESK':
             alan=TOPLAM; tesc=f"{TM2}.{TDM2}" if TM2 else ''; lbl=PARSEL; ada_val=ADA
@@ -254,7 +288,8 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
                 e.dxf.text=lbl
             # Noktalar sütunu
             elif abs(ix-490827.16)<2 or abs(ix-490315.19)<2:
-                e.dxf.text=''  # boş bırak
+                if tip=='ESK': e.dxf.text=tum_noktalar
+                else: e.dxf.text=parsel_noktalar(lbl) if lbl else ''
             # Tescilli alan
             elif abs(ix-490867.08)<2 or abs(ix-490355.11)<2 or abs(ix-490868.60)<2 or abs(ix-490356.63)<2:
                 e.dxf.text=tesc
@@ -354,6 +389,27 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             _set(msp,'KO_R',row_y,UST_MK_X, pt.get('mk','0.09'),0.5)
         else:
             _set(msp,'KO_R',row_y,490743.20,'',0.5)
+
+    # 5b. (D) satırı tablo çizgisi ekle
+    if n>=4:
+        for base_y,x_left,x_right in [
+            (4633570.59,490296.26,490407.13),
+            (4633735.77,490808.23,490919.10),
+        ]:
+            STEP=-(base_y-(base_y+8.62)) if base_y>4633600 else 4633570.59-4633576.87
+            STEP=4633570.59-4633576.87  # -6.28
+            if base_y>4633600: STEP=4633735.77-4633742.05  # -6.28 üst tablo
+            new_line_y=base_y+STEP
+            # Çizgi var mı kontrol et
+            has_line=any(
+                e.dxftype()=='LINE' and e.dxf.layer=='KO_C' and
+                abs(float(e.dxf.start.y)-new_line_y)<0.2 and
+                abs(float(e.dxf.end.y)-new_line_y)<0.2
+                for e in msp
+            )
+            if not has_line:
+                msp.add_line((x_left,new_line_y,0),(x_right,new_line_y,0),
+                             dxfattribs={'layer':'KO_C','color':256})
 
     # 6. KO_M beyaz
     layer=doc.layers.get('KO_M')
