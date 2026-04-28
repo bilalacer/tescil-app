@@ -247,6 +247,22 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     # Tüm noktalar (eski parsel)
     tum_noktalar=','.join(str(pt['no']) for pt in KOOR)
 
+    # 3b. Eski devam satırlarını (continuation rows) temizle
+    # Bunlar şablondaki uzun noktalar listesinin ikinci satırları
+    CONT_ROWS=[
+        # Alt tablo continuation Y'leri (uzun noktalar listesi 2. satırları)
+        4633590.89, 4633581.64,
+        # Üst tablo continuation Y'leri
+        4633756.07, 4633746.82,
+    ]
+    for e in msp:
+        if e.dxftype()=='TEXT' and e.dxf.layer=='KO_R':
+            iy=float(e.dxf.insert.y)
+            for cy in CONT_ROWS:
+                if abs(iy-cy)<0.3:
+                    e.dxf.text=''
+                    break
+
     # 4. KO_R ALAN TABLOSU - EXACT Y POZİSYONLARI
     # Alt tablo satır Y'leri (şablondan):
     ALT_ROWS={
@@ -314,14 +330,16 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
         STEP_ALT=4633570.59-4633576.87; STEP_UST=4633735.77-4633742.05
         for base_y, step, x_map in [
             (4633570.59, STEP_ALT, {
-                490297.00:ADA,490305.20:label_d,490315.19:'',
-                490355.11:'',490356.63:'',490369.77:f"{alan_d:.2f}",490371.29:f"{alan_d:.2f}",
-                490382.30:'0.00',490393.97:str(ys_d),490395.49:str(ys_d)
+                490297.00:ADA, 490305.20:label_d,
+                490315.19:parsel_noktalar(label_d),
+                490355.11:'', 490369.77:f"{alan_d:.2f}",
+                490382.30:'0.00', 490393.97:str(ys_d)
             }),
             (4633735.77, STEP_UST, {
-                490808.96:ADA,490816.94:label_d,490827.16:'',
-                490867.08:'',490868.60:'',490881.74:f"{alan_d:.2f}",490883.26:f"{alan_d:.2f}",
-                490894.27:'0.00',490905.94:str(ys_d),490907.46:str(ys_d)
+                490808.96:ADA, 490816.94:label_d,
+                490827.16:parsel_noktalar(label_d),
+                490867.08:'', 490881.74:f"{alan_d:.2f}",
+                490894.27:'0.00', 490905.94:str(ys_d)
             }),
         ]:
             new_y=base_y+step
@@ -365,10 +383,12 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             for cx in [ALT_Y_X,ALT_X_X,ALT_MK_X]:
                 _set(msp,'KO_R',row_y,cx,'',0.5)
 
-    # Üst tablo KO_M güncellemesi
+    # Üst tablo KO_M güncellemesi (A1-A5 = 5 slot sonrası devam)
+    UST_KOR_A_OFFSET = len(UST_KOR_A_ROWS)  # = 5
     for i,row_y in enumerate(UST_KOM_ROWS):
-        if i<len(KOOR):
-            pt=KOOR[i]
+        ki = i + UST_KOR_A_OFFSET  # 340/2→nokta6, 340/3→nokta7 ...
+        if ki<len(KOOR):
+            pt=KOOR[ki]
             _set(msp,'KO_M',row_y,490743.20, pt['no'])
             _set(msp,'KO_R',row_y,UST_Y_X,  pt['y'],0.5)
             _set(msp,'KO_R',row_y,UST_X_X,  pt['x'],0.5)
@@ -390,26 +410,37 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
         else:
             _set(msp,'KO_R',row_y,490743.20,'',0.5)
 
+    # 5a. Alan tablosu dikey çizgilerini ekle/düzelt
+    ALT_D_BOT = 4633570.59 + (4633570.59-4633576.87)  # ≈4633563.97 (D alt)
+    UST_D_BOT = 4633735.77 + (4633735.77-4633742.05)  # ≈4633729.49 (D alt üst)
+    ALT_HDR = 4633597.47  # Alt tablo header altı
+    UST_HDR = 4633762.65  # Üst tablo header altı
+
+    # Mevcut dikey çizgileri sil (yanlış uzunluktakiler)
+    to_del_v=[]
+    for e in msp:
+        if e.dxftype()=='LINE' and e.dxf.layer=='KO_C':
+            sx,sy=float(e.dxf.start.x),float(e.dxf.start.y)
+            ex,ey=float(e.dxf.end.x),float(e.dxf.end.y)
+            if abs(sx-ex)<0.1 and abs(sy-ey)>3:  # dikey
+                if 490290<sx<490420 or sx>490800:
+                    to_del_v.append(e)
+    for e in to_del_v: msp.delete_entity(e)
+
+    # Yeni dikey çizgiler - header altından D alt sınırına kadar
+    for vx in [490296.26,490302.36,490314.17,490350.77,490366.24,490380.74,490389.76,490407.13]:
+        msp.add_line((vx,ALT_HDR,0),(vx,ALT_D_BOT if n>=4 else 4633569.55,0),
+                     dxfattribs={'layer':'KO_C','color':256})
+    for vx in [490808.23,490814.33,490826.14,490862.74,490878.20,490892.71,490901.72,490919.10]:
+        msp.add_line((vx,UST_HDR,0),(vx,UST_D_BOT if n>=4 else 4633734.72,0),
+                     dxfattribs={'layer':'KO_C','color':256})
+
     # 5b. (D) satırı tablo çizgisi ekle
     if n>=4:
-        for base_y,x_left,x_right in [
-            (4633570.59,490296.26,490407.13),
-            (4633735.77,490808.23,490919.10),
-        ]:
-            STEP=-(base_y-(base_y+8.62)) if base_y>4633600 else 4633570.59-4633576.87
-            STEP=4633570.59-4633576.87  # -6.28
-            if base_y>4633600: STEP=4633735.77-4633742.05  # -6.28 üst tablo
-            new_line_y=base_y+STEP
-            # Çizgi var mı kontrol et
-            has_line=any(
-                e.dxftype()=='LINE' and e.dxf.layer=='KO_C' and
-                abs(float(e.dxf.start.y)-new_line_y)<0.2 and
-                abs(float(e.dxf.end.y)-new_line_y)<0.2
-                for e in msp
-            )
-            if not has_line:
-                msp.add_line((x_left,new_line_y,0),(x_right,new_line_y,0),
-                             dxfattribs={'layer':'KO_C','color':256})
+        msp.add_line((490296.26,ALT_D_BOT,0),(490407.13,ALT_D_BOT,0),
+                     dxfattribs={'layer':'KO_C','color':256})
+        msp.add_line((490808.23,UST_D_BOT,0),(490919.10,UST_D_BOT,0),
+                     dxfattribs={'layer':'KO_C','color':256})
 
     # 6. KO_M beyaz
     layer=doc.layers.get('KO_M')
