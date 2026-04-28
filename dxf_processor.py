@@ -384,7 +384,7 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
                 _set(msp,'KO_R',row_y,cx,'',0.5)
 
     # Üst tablo KO_M güncellemesi (A1-A5 = 5 slot sonrası devam)
-    UST_KOR_A_OFFSET = len(UST_KOR_A_ROWS)  # = 5
+    UST_KOR_A_OFFSET = 5  # len(UST_KOR_A_ROWS)
     for i,row_y in enumerate(UST_KOM_ROWS):
         ki = i + UST_KOR_A_OFFSET  # 340/2→nokta6, 340/3→nokta7 ...
         if ki<len(KOOR):
