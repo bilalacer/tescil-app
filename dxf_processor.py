@@ -416,24 +416,28 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     ALT_HDR = 4633597.47  # Alt tablo header altı
     UST_HDR = 4633762.65  # Üst tablo header altı
 
-    # Mevcut dikey çizgileri sil (yanlış uzunluktakiler)
+    # Mevcut dikey çizgileri sil - SADECE alan tablosu bölgesi
+    # (Koordinat tablosu çizgileri: alt X<490296, üst X<490808 - dokunma)
+    ALT_ALAN_X_MIN = 490296.0  # Alan tablosu sol sınırı (koordinat tablo sağ sınırı)
+    UST_ALAN_X_MIN = 490808.0
     to_del_v=[]
     for e in msp:
         if e.dxftype()=='LINE' and e.dxf.layer=='KO_C':
             sx,sy=float(e.dxf.start.x),float(e.dxf.start.y)
             ex,ey=float(e.dxf.end.x),float(e.dxf.end.y)
             if abs(sx-ex)<0.1 and abs(sy-ey)>3:  # dikey
-                if 490290<sx<490420 or sx>490800:
+                # Sadece alan tablosu bölgesi
+                if ALT_ALAN_X_MIN<=sx<=490420 or UST_ALAN_X_MIN<=sx<=490925:
                     to_del_v.append(e)
     for e in to_del_v: msp.delete_entity(e)
 
     # Yeni dikey çizgiler - header altından D alt sınırına kadar
+    bot_alt = ALT_D_BOT if n>=4 else 4633569.55
+    bot_ust = UST_D_BOT if n>=4 else 4633734.72
     for vx in [490296.26,490302.36,490314.17,490350.77,490366.24,490380.74,490389.76,490407.13]:
-        msp.add_line((vx,ALT_HDR,0),(vx,ALT_D_BOT if n>=4 else 4633569.55,0),
-                     dxfattribs={'layer':'KO_C','color':256})
+        msp.add_line((vx,ALT_HDR,0),(vx,bot_alt,0),dxfattribs={'layer':'KO_C','color':256})
     for vx in [490808.23,490814.33,490826.14,490862.74,490878.20,490892.71,490901.72,490919.10]:
-        msp.add_line((vx,UST_HDR,0),(vx,UST_D_BOT if n>=4 else 4633734.72,0),
-                     dxfattribs={'layer':'KO_C','color':256})
+        msp.add_line((vx,UST_HDR,0),(vx,bot_ust,0),dxfattribs={'layer':'KO_C','color':256})
 
     # 5b. (D) satırı tablo çizgisi ekle
     if n>=4:
@@ -441,6 +445,32 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
                      dxfattribs={'layer':'KO_C','color':256})
         msp.add_line((490808.23,UST_D_BOT,0),(490919.10,UST_D_BOT,0),
                      dxfattribs={'layer':'KO_C','color':256})
+
+    # 5c. Boş koordinat satırlarının MK değerlerini temizle (0.09 kalıntıları)
+    # ALT: KO_M MK sütunu X=490288.09
+    all_alt_rows = ALT_KOR_ROWS + ALT_KOM_ROWS
+    for i,row_y in enumerate(all_alt_rows):
+        if i >= len(KOOR):
+            _set(msp,'KO_M',row_y,490288.09,'',0.5)
+            _set(msp,'KO_R',row_y,490288.09,'',0.5)
+    # UST: KO_M MK sütunu X=490800.06
+    all_ust_rows = UST_KOR_A_ROWS + UST_KOM_ROWS
+    for i,row_y in enumerate(all_ust_rows):
+        if i >= len(KOOR):
+            _set(msp,'KO_M',row_y,490800.06,'',0.5)
+            _set(msp,'KO_R',row_y,490800.06,'',0.5)
+
+    # 5c. Boş koordinat satırlarının MK değerlerini temizle
+    all_alt_rows_all = ALT_KOR_ROWS + ALT_KOM_ROWS
+    for i,row_y in enumerate(all_alt_rows_all):
+        if i >= len(KOOR):
+            _set(msp,'KO_M',row_y,490288.09,'',0.5)
+            _set(msp,'KO_R',row_y,490288.09,'',0.5)
+    all_ust_rows_all = UST_KOR_A_ROWS + UST_KOM_ROWS
+    for i,row_y in enumerate(all_ust_rows_all):
+        if i >= len(KOOR):
+            _set(msp,'KO_M',row_y,490800.06,'',0.5)
+            _set(msp,'KO_R',row_y,490800.06,'',0.5)
 
     # 6. KO_M beyaz
     layer=doc.layers.get('KO_M')
