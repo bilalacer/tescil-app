@@ -434,13 +434,23 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
                     to_del_v.append(e)
     for e in to_del_v: msp.delete_entity(e)
 
-    # Yeni dikey çizgiler - header altından D alt sınırına kadar
+    # Yeni dikey çizgiler
+    ALT_TABLE_TOP = 4633609.63   # Tablonun tam üst sınırı (sol/sağ dış kenarlıklar için)
+    UST_TABLE_TOP = 4633774.81
     bot_alt = ALT_D_BOT if n>=4 else 4633569.55
     bot_ust = UST_D_BOT if n>=4 else 4633734.72
-    for vx in [490296.26,490302.36,490314.17,490350.77,490366.24,490380.74,490389.76,490407.13]:
-        msp.add_line((vx,ALT_HDR,0),(vx,bot_alt,0),dxfattribs={'layer':'KO_C','color':256})
-    for vx in [490808.23,490814.33,490826.14,490862.74,490878.20,490892.71,490901.72,490919.10]:
-        msp.add_line((vx,UST_HDR,0),(vx,bot_ust,0),dxfattribs={'layer':'KO_C','color':256})
+
+    # Dış kenarlıklar: tam üstten başlar
+    msp.add_line((490296.26,ALT_TABLE_TOP,0),(490296.26,bot_alt,0),dxfattribs={'layer':'KO_C','color':96})
+    msp.add_line((490407.13,ALT_TABLE_TOP,0),(490407.13,bot_alt,0),dxfattribs={'layer':'KO_C','color':96})
+    msp.add_line((490808.23,UST_TABLE_TOP,0),(490808.23,bot_ust,0),dxfattribs={'layer':'KO_C','color':96})
+    msp.add_line((490919.10,UST_TABLE_TOP,0),(490919.10,bot_ust,0),dxfattribs={'layer':'KO_C','color':96})
+
+    # İç sütun ayırıcılar: sütun başlık üstünden başlar
+    for vx in [490302.36,490314.17,490350.77,490366.24,490380.74,490389.76]:
+        msp.add_line((vx,ALT_HDR,0),(vx,bot_alt,0),dxfattribs={'layer':'KO_C','color':96})
+    for vx in [490814.33,490826.14,490862.74,490878.20,490892.71,490901.72]:
+        msp.add_line((vx,UST_HDR,0),(vx,bot_ust,0),dxfattribs={'layer':'KO_C','color':96})
 
     # 5b. (D) satırı alt yatay çizgi
     if n>=4:
