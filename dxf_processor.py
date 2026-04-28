@@ -47,7 +47,11 @@ def cizimden_veri_cek(cizim_bytes):
     parsel etiketlerini çıkarır.
     Döndürür: dict
     """
-    doc = ezdxf.read(BytesIO(cizim_bytes))
+    import tempfile, os as _os
+    with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as _t:
+        _t.write(cizim_bytes); _tpath = _t.name
+    doc = ezdxf.readfile(_tpath)
+    _os.unlink(_tpath)
     msp = doc.modelspace()
 
     # Yeni parsel poligonları
@@ -168,7 +172,11 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     Döndürür: bytes (DXF içeriği)
     """
     cizim_veri = cizimden_veri_cek(cizim_bytes)
-    doc = ezdxf.read(BytesIO(sablon_bytes))
+    import tempfile, os as _os
+    with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as _t:
+        _t.write(sablon_bytes); _tpath = _t.name
+    doc = ezdxf.readfile(_tpath)
+    _os.unlink(_tpath)
     msp = doc.modelspace()
 
     ADA       = cizim_veri['ada_no']
@@ -195,7 +203,10 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
         'B_YOL_DERE','B_ADA_NO','B_ESKİ_PARSEL_NO','B_TERKİN',
         'B_EL_DİREK','POL','B_ESKİ_PARSEL','CEPHE_U','NADI',
     }
-    doc_cizim = ezdxf.read(BytesIO(cizim_bytes))
+    with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as _t2:
+        _t2.write(cizim_bytes); _tpath2 = _t2.name
+    doc_cizim = ezdxf.readfile(_tpath2)
+    _os.unlink(_tpath2)
     xref.load_modelspace(
         sdoc=doc_cizim, tdoc=doc,
         filter_fn=lambda e: e.dxf.layer in NEW_DRAW,
