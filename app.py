@@ -35,6 +35,7 @@ def olustur():
             'TescilliDM2': request.form.get('tescilli_dm2','00'),
             'Tarih':       request.form.get('tarih',''),
             'No':          request.form.get('no',''),
+            'MK':          request.form.get('mk','0.09'),
         }
         from dxf_processor import tescil_olustur
         dxf_bytes = tescil_olustur(sablon_bytes, cizim_bytes, form)
