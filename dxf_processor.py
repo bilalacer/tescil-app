@@ -206,7 +206,7 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             _set(msp,'INPUT',ry,PARSEL_COLS['ada'],   ADA)
             _set(msp,'INPUT',ry,PARSEL_COLS['parsel'],label,2)
             _set(msp,'INPUT',ry,PARSEL_COLS['ha'],    '--')
-            _set(msp,'INPUT',ry,PARSEL_COLS['m2'],    str(pd['m2']))
+            _set(msp,'INPUT',ry,PARSEL_COLS['m2'],    str(pd['m2']).zfill(4))
             _set(msp,'INPUT',ry,PARSEL_COLS['dm2'],   f"{pd['dm2']:02d}")
             _set(msp,'INPUT',ry,PARSEL_COLS['cinsi'], form['Cinsi'])
             _set(msp,'INPUT',ry,PARSEL_COLS['malik'], form['Malik'])
@@ -221,7 +221,7 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
                     elif col=='ada': val=ADA
                     elif col=='parsel': val=label
                     elif col=='ha': val='--'
-                    elif col=='m2': val=str(pd['m2'])
+                    elif col=='m2': val=str(pd['m2']).zfill(4)
                     elif col=='dm2': val=f"{pd['dm2']:02d}"
                     elif col=='cinsi': val=form['Cinsi']
                     elif col=='malik': val=form['Malik']
@@ -416,8 +416,8 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     # 5a. Alan tablosu dikey çizgilerini ekle/düzelt
     ALT_D_BOT = 4633570.59 + (4633570.59-4633576.87)  # ≈4633563.97 (D alt)
     UST_D_BOT = 4633735.77 + (4633735.77-4633742.05)  # ≈4633729.49 (D alt üst)
-    ALT_HDR = 4633597.47  # Alt tablo header altı
-    UST_HDR = 4633762.65  # Üst tablo header altı
+    ALT_HDR = 4633604.49  # Alt tablo - sütun başlık satırı üstü
+    UST_HDR = 4633769.47  # Üst tablo - sütun başlık satırı üstü
 
     # Mevcut dikey çizgileri sil - SADECE alan tablosu bölgesi
     # (Koordinat tablosu çizgileri: alt X<490296, üst X<490808 - dokunma)
