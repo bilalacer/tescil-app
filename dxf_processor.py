@@ -325,9 +325,14 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             if e.dxf.text in ('340/22', '100/1', f'{ADA}/{PARSEL}'):
                 e.dxf.text = f"{ADA}/{PARSEL}"
 
-    out = BytesIO()
-    doc.write(out)
-    return out.getvalue()
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as tmp:
+        tmp_path = tmp.name
+    doc.saveas(tmp_path)
+    with open(tmp_path, 'rb') as f:
+        result = f.read()
+    os.unlink(tmp_path)
+    return result
 
 
 def _update_kor(msp, parseller, koordinatlar, ada, parsel, tescilli_alan, sorted_parcels):
