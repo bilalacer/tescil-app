@@ -134,6 +134,9 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     sp=sorted(P.keys()); n=len(sp)
     TOPLAM=round(sum(v['alan'] for v in P.values()),2)
     TM2=form.get('TescilliM2',''); TDM2=form.get('TescilliDM2','00')
+    MK_VAL=form.get('MK','0.09')  # Tüm noktalara uygulanacak MK değeri
+    # MK değerini tüm koordinat noktalarına uygula
+    for pt in KOOR: pt['mk']=MK_VAL
 
     # 1. ŞABLONDAKİ KROKİ ENTİTYLERİNİ SİL
     DEL_LAYERS={'PARSEL','PARSEL_NO','NOKTA','KYA','@ROL','ROL_CEPHE',
@@ -442,9 +445,9 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
     # 5b. (D) satırı alt yatay çizgi
     if n>=4:
         msp.add_line((490296.26,ALT_D_BOT,0),(490407.13,ALT_D_BOT,0),
-                     dxfattribs={'layer':'KO_C','color':3})
+                     dxfattribs={'layer':'KO_C','color':256,'linetype':'Continuous'})
         msp.add_line((490808.23,UST_D_BOT,0),(490919.10,UST_D_BOT,0),
-                     dxfattribs={'layer':'KO_C','color':3})
+                     dxfattribs={'layer':'KO_C','color':256,'linetype':'Continuous'})
 
     # 5c. Boş koordinat satırlarının MK değerlerini temizle (0.09 kalıntıları)
     # ALT: KO_M MK sütunu X=490288.09
