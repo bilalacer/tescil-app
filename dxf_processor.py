@@ -306,9 +306,9 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             elif abs(ix-490827.16)<2 or abs(ix-490315.19)<2:
                 if tip=='ESK': e.dxf.text=tum_noktalar
                 else: e.dxf.text=parsel_noktalar(lbl) if lbl else ''
-            # Tescilli alan
+            # Tescilli alan (yeni parseller için hesap alan ile aynı)
             elif abs(ix-490867.08)<2 or abs(ix-490355.11)<2 or abs(ix-490868.60)<2 or abs(ix-490356.63)<2:
-                e.dxf.text=tesc
+                e.dxf.text=tesc if tesc else (f"{alan:.2f}" if tip=='YEN' else '')
             # Hesap alan
             elif abs(ix-490881.74)<2 or abs(ix-490369.77)<2 or abs(ix-490883.26)<2 or abs(ix-490371.29)<2:
                 e.dxf.text=f"{alan:.2f}"
@@ -332,13 +332,13 @@ def tescil_olustur(sablon_bytes, cizim_bytes, form):
             (4633570.59, STEP_ALT, {
                 490297.00:ADA, 490305.20:label_d,
                 490315.19:parsel_noktalar(label_d),
-                490355.11:'', 490369.77:f"{alan_d:.2f}",
+                490355.11:f"{alan_d:.2f}", 490369.77:f"{alan_d:.2f}",
                 490382.30:'0.00', 490393.97:str(ys_d)
             }),
             (4633735.77, STEP_UST, {
                 490808.96:ADA, 490816.94:label_d,
                 490827.16:parsel_noktalar(label_d),
-                490867.08:'', 490881.74:f"{alan_d:.2f}",
+                490867.08:f"{alan_d:.2f}", 490881.74:f"{alan_d:.2f}",
                 490894.27:'0.00', 490905.94:str(ys_d)
             }),
         ]:
