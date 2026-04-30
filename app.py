@@ -64,6 +64,23 @@ def onizle():
         return jsonify({'hata': traceback.format_exc()}), 500
 
 
+# ─── Keep-alive: uygulamayı uyanık tut ───────────────────────
+import threading, urllib.request
+
+def keep_alive():
+    import time
+    time.sleep(60)  # İlk başlangıçta 1 dk bekle
+    while True:
+        try:
+            urllib.request.urlopen('https://tescil.edirnelihkab.com.tr/', timeout=10)
+            print("Keep-alive: OK")
+        except Exception as e:
+            print(f"Keep-alive hata: {e}")
+        time.sleep(14 * 60)  # 14 dakikada bir
+
+t = threading.Thread(target=keep_alive, daemon=True)
+t.start()
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
